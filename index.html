@@ -1,0 +1,181 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta http-equiv='Content-Type' content='text/html; charset=UTF-8'>
+    <title> webrtc whip test </title>
+    <style type="text/css">
+        .room {
+            cursor: pointer;
+        }
+
+        div.select {
+            display: inline-block;
+            margin: 0 0 1em 0;
+        }
+    </style>
+
+
+    <script type='text/javascript'>
+
+        window.localStorage.setItem('debug', '*');
+
+        const whipURL = 'https://webrtcpush.myqcloud.com/webrtc/v1/whippushstream';
+
+        const streamURL = "webrtc://webrtcpush.rt-cdn.com/live/";
+
+        async function publish() {
+
+            let videoElement = document.getElementById('video_container_publish');
+            let streamname = document.getElementById("streamname").value;
+
+            const constraints = {
+                video: { width: { exact: 640 }, height: { exact: 480 } },
+                audio: true
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+            videoElement.srcObject = stream;
+
+            let pc;
+
+            pc = new RTCPeerConnection();
+
+            await pc.addTransceiver(stream.getVideoTracks()[0], {
+                direction: "sendonly",
+                streams: [stream],
+            });
+
+            await pc.addTransceiver(stream.getAudioTracks()[0], {
+                direction: "sendonly",
+                streams: [stream],
+            });
+
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+
+            console.log(offer.sdp);
+
+
+            let streamurl = encodeURI(streamURL + streamname);
+
+            let res = await fetch(`${whipURL}?streamurl=${streamurl}`, {
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/sdp'
+                },
+                body: offer.sdp
+            })
+
+            console.dir(res)
+            let ret = await res.text()
+
+            let answer = new RTCSessionDescription({
+                type: 'answer',
+                sdp: ret
+            })
+
+            await pc.setRemoteDescription(answer);
+        }
+
+
+        async function play() {
+
+            let videoElement = document.getElementById('video_container_play');
+
+
+            var pc = new RTCPeerConnection();
+
+            let vtransceiver = pc.addTransceiver("video", {
+                direction: "recvonly",
+            });
+
+
+            let atransceiver = pc.addTransceiver("audio", {
+                direction: "recvonly",
+            });
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+
+            pc.ontrack = (e) => {
+                if (!videoElement.srcObject) {
+                    videoElement.srcObject = e.streams[0]
+                }
+            }
+
+
+            let res = await fetch(serverurl + "/rtc/v1/play", {
+                method: 'post',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sdp: offer.sdp
+                })
+            })
+
+            let ret = await res.json()
+
+            console.dir(ret)
+
+            let answer = new RTCSessionDescription({
+                type: 'answer',
+                sdp: ret.sdp
+            })
+
+            await pc.setRemoteDescription(answer);
+        }
+
+
+    </script>
+
+</head>
+
+<body>
+    <h1>WebRTC Demo</h1>
+    <br />
+
+
+    <div>
+        <form>
+            <input type="text" size="50" id="streamname" name="streamname" value="live"><br><br>
+        </form>
+        <button onclick="publish()">Publish</button>
+        <br><br>
+        <!-- <button onclick="play()">Play</button> -->
+    </div>
+
+
+
+    <div id="conference">
+        publish:
+        <br />
+        <div id="container">
+            <video id="video_container_publish" playsinline controls autoplay muted width="640" height="480"></video>
+        </div>
+        <br />
+
+    </div>
+
+
+
+    <!-- 
+    <div id="conference">
+        play:
+        <br />
+        <div id="container">
+            <video id="video_container_play" playsinline controls autoplay muted width="640" height="480"></video>
+        </div>
+        <br />
+
+    </div> -->
+
+</body>
+
+
+</html>
